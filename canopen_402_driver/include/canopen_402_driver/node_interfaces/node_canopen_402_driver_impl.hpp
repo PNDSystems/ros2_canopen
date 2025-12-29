@@ -413,6 +413,8 @@ void NodeCanopen402Driver<NODETYPE>::activate(bool called_from_base)
 {
   NodeCanopenProxyDriver<NODETYPE>::activate(false);
   motor_->registerDefaultModes();
+  // Allocate modes immediately so they're available before handleInit() is called
+  motor_->allocateModes();
   motor_->set_diagnostic_status_msgs(this->diagnostic_collector_, this->diagnostic_enabled_);
 }
 

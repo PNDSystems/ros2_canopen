@@ -196,6 +196,21 @@ public:
     registerMode<CyclicSynchronousTorqueMode>(MotorBase::Cyclic_Synchronous_Torque, driver);
   }
 
+  /**
+   * @brief Allocate all registered modes that are supported by the device
+   *
+   * This function calls all registered mode allocators to create mode objects
+   * for modes that are supported by the device.
+   */
+  void allocateModes()
+  {
+    for (std::unordered_map<uint16_t, AllocFuncType>::iterator it = mode_allocators_.begin();
+         it != mode_allocators_.end(); ++it)
+    {
+      (it->second)();
+    }
+  }
+
   double get_effort() const
   {
     return (double)this->driver->universal_get_value<int16_t>(0x6077, 0);
