@@ -17,6 +17,7 @@
 //
 
 #include "canopen_402_driver/motor.hpp"
+
 using namespace ros2_canopen;
 
 bool Motor402::setTarget(double val)
