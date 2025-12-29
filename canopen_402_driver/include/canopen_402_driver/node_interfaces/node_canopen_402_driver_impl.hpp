@@ -21,6 +21,7 @@
 
 #include "canopen_402_driver/node_interfaces/node_canopen_402_driver.hpp"
 #include "canopen_core/driver_error.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 #include <optional>
 
@@ -642,7 +643,8 @@ bool NodeCanopen402Driver<NODETYPE>::set_operation_mode(uint16_t mode)
     }
     else
     {
-      return false;
+      RCLCPP_INFO(this->node_->get_logger(), "Mode already set to %d", mode);
+      return true;
     }
   }
   return false;
