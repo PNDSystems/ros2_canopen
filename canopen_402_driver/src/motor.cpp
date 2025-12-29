@@ -64,7 +64,11 @@ void Motor402::registerMode(uint16_t id, const ModeSharedPtr & m)
 ModeSharedPtr Motor402::allocMode(uint16_t mode)
 {
   ModeSharedPtr res;
-  if (isModeSupportedByDevice(mode))
+
+  // Check if device supports the mode
+  bool device_supports = isModeSupportedByDevice(mode);
+
+  if (device_supports)
   {
     std::scoped_lock map_lock(map_mutex_);
     std::unordered_map<uint16_t, ModeSharedPtr>::iterator it = modes_.find(mode);
@@ -72,7 +76,60 @@ ModeSharedPtr Motor402::allocMode(uint16_t mode)
     {
       res = it->second;
     }
+    else
+    {
+      // Mode is supported by device but not registered
+      RCLCPP_WARN(
+        rclcpp::get_logger("canopen_402_driver"),
+        "Mode %d is supported by device but not registered in modes_ map", mode);
+
+      // Log registered modes for debugging
+      if (!modes_.empty())
+      {
+        std::string registered_modes_str = "Registered modes: ";
+        for (const auto & pair : modes_)
+        {
+          registered_modes_str += std::to_string(pair.first) + " ";
+        }
+        RCLCPP_WARN(rclcpp::get_logger("canopen_402_driver"), "%s", registered_modes_str.c_str());
+      }
+      else
+      {
+        RCLCPP_WARN(rclcpp::get_logger("canopen_402_driver"), "No modes are registered!");
+      }
+    }
   }
+  else
+  {
+    // Mode is not supported by device
+    try
+    {
+      uint32_t supported_modes =
+        driver->universal_get_value<uint32_t>(supported_drive_modes_index, 0x0);
+      RCLCPP_WARN(
+        rclcpp::get_logger("canopen_402_driver"),
+        "Mode %d is not supported by device. Supported modes bitmask (0x6502): 0x%08X", mode,
+        supported_modes);
+
+      // Show which modes are supported
+      std::string supported_modes_str = "Supported modes (from device): ";
+      for (uint16_t m = 1; m <= 32; m++)
+      {
+        if (supported_modes & (1 << (m - 1)))
+        {
+          supported_modes_str += std::to_string(m) + " ";
+        }
+      }
+      RCLCPP_WARN(rclcpp::get_logger("canopen_402_driver"), "%s", supported_modes_str.c_str());
+    }
+    catch (...)
+    {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("canopen_402_driver"),
+        "Failed to read supported modes from device (0x6502)");
+    }
+  }
+
   return res;
 }
 
@@ -99,7 +156,23 @@ bool Motor402::switchMode(uint16_t mode)
   ModeSharedPtr next_mode = allocMode(mode);
   if (!next_mode)
   {
-    RCLCPP_INFO(rclcpp::get_logger("canopen_402_driver"), "Mode is not supported.");
+    // Get mode name for better error message
+    const char * mode_names[] = {
+      "No_Mode (0)",
+      "Profiled_Position (1)",
+      "Velocity (2)",
+      "Profiled_Velocity (3)",
+      "Profiled_Torque (4)",
+      "Reserved (5)",
+      "Homing (6)",
+      "Interpolated_Position (7)",
+      "Cyclic_Synchronous_Position (8)",
+      "Cyclic_Synchronous_Velocity (9)",
+      "Cyclic_Synchronous_Torque (10)"};
+    const char * mode_name = (mode <= 10) ? mode_names[mode] : "Unknown";
+    RCLCPP_ERROR(
+      rclcpp::get_logger("canopen_402_driver"),
+      "Mode %d (%s) is not supported. See previous warnings for details.", mode, mode_name);
     return false;
   }
 
@@ -351,11 +424,9 @@ void Motor402::handleDiag()
 
 bool Motor402::handleInit()
 {
-  for (std::unordered_map<uint16_t, AllocFuncType>::iterator it = mode_allocators_.begin();
-       it != mode_allocators_.end(); ++it)
-  {
-    (it->second)();
-  }
+  // Modes should already be allocated in activate(), but allocate them here as well
+  // in case handleInit() is called before activate() (which shouldn't happen normally)
+  allocateModes();
   RCLCPP_INFO(rclcpp::get_logger("canopen_402_driver"), "Init: Read State");
   if (!readState())
   {
@@ -456,6 +527,8 @@ bool Motor402::handleRecover()
 }
 bool Motor402::handleEnable()
 {
+  allocateModes();
+
   RCLCPP_INFO(rclcpp::get_logger("canopen_402_driver"), "Enable: Read State");
   if (!readState())
   {
@@ -468,6 +541,9 @@ bool Motor402::handleEnable()
     std::cout << "Could not enable motor" << std::endl;
     return false;
   }
+  RCLCPP_INFO(
+    rclcpp::get_logger("canopen_402_driver"), "Enable: State %d",
+    static_cast<int>(state_handler_.getState()));
   return true;
 }
 
