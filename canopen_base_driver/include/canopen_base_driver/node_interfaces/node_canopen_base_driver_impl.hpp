@@ -14,10 +14,20 @@
 
 #ifndef NODE_CANOPEN_BASE_DRIVER_IMPL
 #define NODE_CANOPEN_BASE_DRIVER_IMPL
+
 #include "canopen_base_driver/node_interfaces/node_canopen_base_driver.hpp"
 #include "canopen_core/driver_error.hpp"
 
+#include <chrono>
+
+using namespace std::chrono_literals;
 using namespace ros2_canopen::node_interfaces;
+
+namespace
+{
+constexpr int kMaxBootAttempts = 5;
+constexpr std::chrono::milliseconds kNMTResetSleepDelay = 2000ms;
+}  // namespace
 
 template <class NODETYPE>
 NodeCanopenBaseDriver<NODETYPE>::NodeCanopenBaseDriver(NODETYPE * node)
@@ -293,9 +303,8 @@ void NodeCanopenBaseDriver<NODETYPE>::add_to_master()
   {
     bool boot_success = false;
     int boot_attempts = 0;
-    const int max_boot_attempts = 3;  // 1 retry allowed
     RCLCPP_WARN(this->node_->get_logger(), "Wait for device to boot...");
-    while (!boot_success && boot_attempts < max_boot_attempts)
+    while (!boot_success && boot_attempts < kMaxBootAttempts)
     {
       boot_attempts++;
       try
@@ -309,10 +318,11 @@ void NodeCanopenBaseDriver<NODETYPE>::add_to_master()
         RCLCPP_ERROR(
           this->node_->get_logger(), "Boot attempt %d failed: %s", boot_attempts, e.what());
 
-        if (boot_attempts < max_boot_attempts)
+        if (boot_attempts < kMaxBootAttempts)
         {
           RCLCPP_INFO(this->node_->get_logger(), "Sending NMT reset before retrying boot");
           this->lely_driver_->nmt_command(canopen::NmtCommand::RESET_NODE);
+          std::this_thread::sleep_for(kNMTResetSleepDelay);
           this->lely_driver_->Boot();  // Trigger boot again
           RCLCPP_WARN(this->node_->get_logger(), "Retrying boot configuration...");
         }
