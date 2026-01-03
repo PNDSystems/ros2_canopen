@@ -44,6 +44,7 @@ public:
   {
     CW_NewPoint = Command402::CW_Operation_mode_specific0,
     CW_Immediate = Command402::CW_Operation_mode_specific1,
+    CW_AbsRel = Command402::CW_Operation_mode_specific2,  // Abs/Rel bit: 0=absolute, 1=relative
     CW_Blending = Command402::CW_Operation_mode_specific3,
   };
   ProfiledPositionMode(std::shared_ptr<LelyDriverBridge> driver)
@@ -66,6 +67,7 @@ public:
   virtual bool write(OpModeAccesser & cw)
   {
     cw.set(CW_Immediate);
+    cw.reset(CW_AbsRel);  // Always use absolute positioning (bit 6 = 0)
     if (hasTarget())
     {
       int32_t target = getTarget();
